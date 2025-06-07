@@ -1,14 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { DownloadIcon, Hash, Eye, EyeOff } from 'lucide-react';
-
-// CodeMirror Imports
+import { useEffect, useRef } from 'react';
 import { EditorState, Compartment } from '@codemirror/state';
-import { EditorView, keymap, lineNumbers } from '@codemirror/view';
+import { EditorView, keymap, lineNumbers, drawSelection } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { vim } from '@replit/codemirror-vim';
+import { getCM, vim } from '@replit/codemirror-vim';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { syntaxHighlighting, HighlightStyle, foldGutter, indentOnInput, bracketMatching } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
@@ -19,6 +16,10 @@ const customSetup = [
   foldGutter(),
   indentOnInput(),
   bracketMatching(),
+  drawSelection({
+    cursorBlinkRate: 1200,
+    drawRangeCursor: true
+  }),
   keymap.of([...defaultKeymap, ...historyKeymap]),
 ];
 
@@ -36,7 +37,7 @@ const editorTheme = EditorView.theme({
     padding: '1rem 2rem',
   },
   '.cm-content': {
-    caretColor: '#ff0000',
+    caretColor: '#0000ff',
     fontFamily: 'inherit',
     maxWidth: '900px',
     margin: '0 auto',
@@ -45,7 +46,7 @@ const editorTheme = EditorView.theme({
     padding: '0 4px',
   },
   '&.cm-focused .cm-cursor': {
-    borderLeftColor: '#ff0000',
+    borderLeftColor: '#0000ff',
   },
   '.cm-gutters': {
     display: 'none', // Hide gutters by default
@@ -71,21 +72,23 @@ const editorTheme = EditorView.theme({
   '&.cm-focused .cm-activeLine': {
     backgroundColor: 'transparent',
   },
-  '.cm-selectionLayer': {
-    zIndex: '1 !important',
+  '.cm-selectionBackground': {
+    backgroundColor: 'rgba(0, 123, 255, 0.3) !important',
   },
-  '.cm-selectionLayer .cm-selectionBackground': {
-    backgroundColor: 'rgba(173, 216, 230, 0.4) !important',
+  '&.cm-focused .cm-selectionBackground': {
+    backgroundColor: 'rgba(0, 123, 255, 0.4) !important',
   },
-  '&.cm-focused .cm-selectionLayer .cm-selectionBackground': {
-    backgroundColor: 'rgba(173, 216, 230, 0.4) !important',
+  '&.cm-editor.cm-focused .cm-selectionBackground': {
+    backgroundColor: 'rgba(0, 123, 255, 0.4) !important',
   },
-  '.cm-content .cm-selectionBackground': {
-    backgroundColor: 'rgba(255, 0, 0, 0.5) !important',
+  '&.cm-editor .cm-selectionBackground': {
+    backgroundColor: 'rgba(0, 123, 255, 0.3) !important',
   },
   '.cm-content ::selection': {
-    color: 'red !important',
-    backgroundColor: 'rgba(173, 216, 230, 0.5) !important',
+    backgroundColor: 'transparent !important',
+  },
+  '.cm-content ::-moz-selection': {
+    backgroundColor: 'transparent !important',
   },
 });
 
@@ -115,18 +118,33 @@ const rawMarkdownStyles = HighlightStyle.define([
   { tag: tags.list, color: "#24292e" },
 ]);
 
+export interface EditorProps {
+  value: string;
+  onChange: (value: string) => void;
+  showGutter?: boolean;
+  showMarkdown?: boolean;
+  editorViewRef: React.MutableRefObject<EditorView | null>;
+  onVimStateChange?: (state: { mode: string; keyBuffer: string }) => void;
+}
+
 // Editor component
-const Editor = ({ value, onChange, showGutter = false, showMarkdown = true, editorViewRef }: { 
-  value: string, 
-  onChange: (value: string) => void,
-  showGutter?: boolean,
-  showMarkdown?: boolean,
-  editorViewRef: React.MutableRefObject<EditorView | null>
-}) => {
+export const Editor = ({
+  value,
+  onChange,
+  showGutter = false,
+  showMarkdown = true,
+  editorViewRef,
+  onVimStateChange,
+}: EditorProps) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const gutterCompartment = useRef(new Compartment());
   const markdownCompartment = useRef(new Compartment());
+  const onVimStateChangeRef = useRef(onVimStateChange);
+
+  useEffect(() => {
+    onVimStateChangeRef.current = onVimStateChange;
+  }, [onVimStateChange]);
 
   useEffect(() => {
     if (editorRef.current && !viewRef.current) {
@@ -165,6 +183,35 @@ const Editor = ({ value, onChange, showGutter = false, showMarkdown = true, edit
 
       // Set initial gutter visibility
       view.dom.classList.toggle('show-gutters', showGutter);
+
+      if (onVimStateChangeRef.current) {
+        const cm = getCM(view);
+        if (cm) {
+          const onKeypress = () => {
+            requestAnimationFrame(() => {
+              if (onVimStateChangeRef.current && viewRef.current) {
+                const currentCm = getCM(viewRef.current);
+                if (currentCm?.state.vim) {
+                  onVimStateChangeRef.current({
+                    mode: currentCm.state.vim.mode || '',
+                    keyBuffer: (currentCm.state.vim as any).keyBuffer || '',
+                  });
+                }
+              }
+            });
+          };
+          const onModeChange = (mode: { mode: string }) => {
+            if (onVimStateChangeRef.current) {
+              onVimStateChangeRef.current({ mode: mode.mode, keyBuffer: '' });
+            }
+          };
+          cm.on('vim-keypress', onKeypress);
+          cm.on('vim-mode-change', onModeChange);
+          if (cm.state.vim) {
+            onVimStateChangeRef.current({ mode: cm.state.vim.mode || '', keyBuffer: '' });
+          }
+        }
+      }
     }
 
     return () => {
@@ -214,104 +261,4 @@ const Editor = ({ value, onChange, showGutter = false, showMarkdown = true, edit
   }, [value]);
 
   return <div ref={editorRef} className="w-full h-full flex-grow" />;
-};
-
-export default function Home() {
-  // const [isDarkMode, setIsDarkMode] = useState(false);
-  const [showGutter, setShowGutter] = useState(false);
-  const [showMarkdown, setShowMarkdown] = useState(true);
-  const [textContent, setTextContent] = useState('# Welcome to Vim Editor\n\nStart typing here...\n\n**Bold text** and *italic text*\n\n## Features\n- Markdown support\n- Vim keybindings\n- Clean interface');
-  const editorViewRef = useRef<EditorView | null>(null);
-
-  const handleSave = () => {
-    const element = document.createElement("a");
-    const file = new Blob([textContent], {type: 'text/plain'});
-    element.href = URL.createObjectURL(file);
-    element.download = "document.md";
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-  };
-
-  const insertMarkdown = (type: 'bold' | 'italic' | 'underline' | 'h1' | 'h2' | 'normal') => {
-    const view = editorViewRef.current;
-    if (!view) return;
-    
-    const selection = view.state.selection.main;
-    let from = selection.from;
-    let to = selection.to;
-    const selectedText = view.state.sliceDoc(from, to);
-    
-    let newText = '';
-    switch (type) {
-      case 'bold':
-        newText = `**${selectedText}**`;
-        break;
-      case 'italic':
-        newText = `*${selectedText}*`;
-        break;
-      case 'underline':
-        newText = `_${selectedText}_`;
-        break;
-      case 'h1':
-        newText = `# ${selectedText}`;
-        break;
-      case 'h2':
-        newText = `## ${selectedText}`;
-        break;
-      case 'normal':
-        // Remove any markdown syntax
-        newText = selectedText.replace(/^#+ |[*_]+/g, '');
-        break;
-    }
-    
-    view.dispatch({
-      changes: { from, to, insert: newText }
-    });
-  };
-
-  return (
-    <div className="min-h-screen bg-[#ffffff] text-black">
-      {/* Floating Navbar */}
-      <header className="fixed top-4 left-1/2 -translate-x-1/2 z-10 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-sm border border-gray-200/50 flex items-center gap-2 w-[95%] max-w-5xl">
-        <div className="flex items-center gap-1.5">
-          <button 
-            onClick={() => setShowGutter(!showGutter)}
-            className="p-1.5 hover:bg-gray-100 rounded-md flex items-center gap-1 text-sm"
-            title="Toggle line numbers"
-          >
-            <Hash size={16} />
-            {showGutter ? 'Hide' : 'Show'} Numbers
-          </button>
-          <button 
-            onClick={() => setShowMarkdown(!showMarkdown)}
-            className="p-1.5 hover:bg-gray-100 rounded-md flex items-center gap-1 text-sm"
-            title="Toggle markdown preview"
-          >
-            {showMarkdown ? <EyeOff size={16} /> : <Eye size={16} />}
-            {showMarkdown ? 'Show Raw' : 'Show Preview'}
-          </button>
-        </div>
-        <div className="h-4 w-px bg-gray-200" />
-        <button
-          onClick={handleSave}
-          className="p-1.5 hover:bg-gray-100 rounded-md flex items-center gap-1.5 text-sm"
-        >
-          <DownloadIcon size={16} /> Save as .md
-        </button>
-      </header>
-
-      {/* Editor */}
-      <main className="pt-20 h-[calc(100vh-40px)]">
-        <Editor 
-          value={textContent} 
-          onChange={setTextContent}
-          showGutter={showGutter}
-          showMarkdown={showMarkdown}
-          editorViewRef={editorViewRef}
-        />
-      </main>
-
-    </div>
-  );
-}
+}; 
