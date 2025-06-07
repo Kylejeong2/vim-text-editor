@@ -1,40 +1,29 @@
 {
-  "name": "vim-text-editor",
-  "version": "0.1.0",
+  "name": "vim-text-editor-workspace",
+  "version": "1.0.0",
+  "description": "A vim text editor that runs on both web and desktop",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "dependencies": {
-    "@codemirror/commands": "^6.8.1",
-    "@codemirror/lang-markdown": "^6.3.2",
-    "@codemirror/language": "^6.11.0",
-    "@codemirror/language-data": "^6.5.1",
-    "@codemirror/state": "^6.5.2",
-    "@codemirror/view": "^6.36.8",
-    "@lezer/highlight": "^1.2.1",
-    "@replit/codemirror-vim": "^6.3.0",
-    "@types/marked": "^5.0.2",
-    "codemirror": "^6.0.1",
-    "lucide-react": "^0.511.0",
-    "marked": "^15.0.11",
-    "next": "15.3.2",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "dev:web": "pnpm --filter web dev",
+    "dev:electron": "pnpm --filter electron dev",
+    "build:web": "pnpm --filter web build",
+    "build:electron": "pnpm --filter electron build",
+    "build:all": "pnpm build:web && pnpm build:electron",
+    "dev:all": "concurrently \"pnpm dev:web\" \"pnpm dev:electron\"",
+    "clean": "pnpm -r clean"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
-    "@tailwindcss/typography": "^0.5.16",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "15.3.2",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  }
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^8.2.2",
+    "css-loader": "^7.1.2",
+    "postcss": "^8.5.4",
+    "postcss-loader": "^8.1.1",
+    "style-loader": "^4.0.0",
+    "tailwindcss": "^4.1.8"
+  },
+  "packageManager": "pnpm@8.15.0"
 }
