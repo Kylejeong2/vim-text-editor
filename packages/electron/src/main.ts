@@ -19,6 +19,8 @@ const createWindow = (): void => {
     resizable: true,
     movable: true,
     show: false, // Don't show until ready
+    titleBarStyle: 'hidden', // Hide the title bar
+    transparent: true, // Make window background transparent
   });
 
   // Show window when ready to prevent visual flash

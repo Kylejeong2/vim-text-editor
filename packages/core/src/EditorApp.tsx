@@ -18,6 +18,7 @@ export const EditorApp = ({
   const [showMarkdown, setShowMarkdown] = useState(true);
   const [textContent, setTextContent] = useState(initialContent);
   const editorViewRef = useRef<EditorView | null>(null);
+  const [vimState, setVimState] = useState<{ mode: string; keyBuffer: string } | null>(null);
 
   const handleSave = () => {
     if (onSave) {
@@ -100,6 +101,12 @@ export const EditorApp = ({
         >
           <DownloadIcon size={16} /> Save as .md
         </button>
+        <div className="flex-grow" />
+        {vimState && (
+          <div className="text-sm text-gray-600 font-mono">
+            {vimState.keyBuffer || `-- ${vimState.mode.toUpperCase()} --`}
+          </div>
+        )}
       </header>
 
       {/* Editor */}
@@ -109,6 +116,7 @@ export const EditorApp = ({
           onChange={setTextContent}
           showGutter={showGutter}
           showMarkdown={showMarkdown}
+          onVimStateChange={setVimState}
           editorViewRef={editorViewRef}
         />
       </main>

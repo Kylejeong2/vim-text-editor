@@ -2,10 +2,10 @@
 
 import { useEffect, useRef } from 'react';
 import { EditorState, Compartment } from '@codemirror/state';
-import { EditorView, keymap, lineNumbers } from '@codemirror/view';
+import { EditorView, keymap, lineNumbers, drawSelection } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { vim } from '@replit/codemirror-vim';
+import { getCM, vim } from '@replit/codemirror-vim';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { syntaxHighlighting, HighlightStyle, foldGutter, indentOnInput, bracketMatching } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
@@ -16,6 +16,10 @@ const customSetup = [
   foldGutter(),
   indentOnInput(),
   bracketMatching(),
+  drawSelection({
+    cursorBlinkRate: 1200,
+    drawRangeCursor: true
+  }),
   keymap.of([...defaultKeymap, ...historyKeymap]),
 ];
 
@@ -33,7 +37,7 @@ const editorTheme = EditorView.theme({
     padding: '1rem 2rem',
   },
   '.cm-content': {
-    caretColor: '#ff0000',
+    caretColor: '#0000ff',
     fontFamily: 'inherit',
     maxWidth: '900px',
     margin: '0 auto',
@@ -42,7 +46,7 @@ const editorTheme = EditorView.theme({
     padding: '0 4px',
   },
   '&.cm-focused .cm-cursor': {
-    borderLeftColor: '#ff0000',
+    borderLeftColor: '#0000ff',
   },
   '.cm-gutters': {
     display: 'none', // Hide gutters by default
@@ -68,21 +72,23 @@ const editorTheme = EditorView.theme({
   '&.cm-focused .cm-activeLine': {
     backgroundColor: 'transparent',
   },
-  '.cm-selectionLayer': {
-    zIndex: '1 !important',
+  '.cm-selectionBackground': {
+    backgroundColor: 'rgba(0, 123, 255, 0.3) !important',
   },
-  '.cm-selectionLayer .cm-selectionBackground': {
-    backgroundColor: 'rgba(173, 216, 230, 0.4) !important',
+  '&.cm-focused .cm-selectionBackground': {
+    backgroundColor: 'rgba(0, 123, 255, 0.4) !important',
   },
-  '&.cm-focused .cm-selectionLayer .cm-selectionBackground': {
-    backgroundColor: 'rgba(173, 216, 230, 0.4) !important',
+  '&.cm-editor.cm-focused .cm-selectionBackground': {
+    backgroundColor: 'rgba(0, 123, 255, 0.4) !important',
   },
-  '.cm-content .cm-selectionBackground': {
-    backgroundColor: 'rgba(255, 0, 0, 0.5) !important',
+  '&.cm-editor .cm-selectionBackground': {
+    backgroundColor: 'rgba(0, 123, 255, 0.3) !important',
   },
   '.cm-content ::selection': {
-    color: 'red !important',
-    backgroundColor: 'rgba(173, 216, 230, 0.5) !important',
+    backgroundColor: 'transparent !important',
+  },
+  '.cm-content ::-moz-selection': {
+    backgroundColor: 'transparent !important',
   },
 });
 
@@ -118,20 +124,27 @@ export interface EditorProps {
   showGutter?: boolean;
   showMarkdown?: boolean;
   editorViewRef: React.MutableRefObject<EditorView | null>;
+  onVimStateChange?: (state: { mode: string; keyBuffer: string }) => void;
 }
 
 // Editor component
-export const Editor = ({ 
-  value, 
-  onChange, 
-  showGutter = false, 
-  showMarkdown = true, 
-  editorViewRef 
+export const Editor = ({
+  value,
+  onChange,
+  showGutter = false,
+  showMarkdown = true,
+  editorViewRef,
+  onVimStateChange,
 }: EditorProps) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const gutterCompartment = useRef(new Compartment());
   const markdownCompartment = useRef(new Compartment());
+  const onVimStateChangeRef = useRef(onVimStateChange);
+
+  useEffect(() => {
+    onVimStateChangeRef.current = onVimStateChange;
+  }, [onVimStateChange]);
 
   useEffect(() => {
     if (editorRef.current && !viewRef.current) {
@@ -170,6 +183,35 @@ export const Editor = ({
 
       // Set initial gutter visibility
       view.dom.classList.toggle('show-gutters', showGutter);
+
+      if (onVimStateChangeRef.current) {
+        const cm = getCM(view);
+        if (cm) {
+          const onKeypress = () => {
+            requestAnimationFrame(() => {
+              if (onVimStateChangeRef.current && viewRef.current) {
+                const currentCm = getCM(viewRef.current);
+                if (currentCm?.state.vim) {
+                  onVimStateChangeRef.current({
+                    mode: currentCm.state.vim.mode || '',
+                    keyBuffer: (currentCm.state.vim as any).keyBuffer || '',
+                  });
+                }
+              }
+            });
+          };
+          const onModeChange = (mode: { mode: string }) => {
+            if (onVimStateChangeRef.current) {
+              onVimStateChangeRef.current({ mode: mode.mode, keyBuffer: '' });
+            }
+          };
+          cm.on('vim-keypress', onKeypress);
+          cm.on('vim-mode-change', onModeChange);
+          if (cm.state.vim) {
+            onVimStateChangeRef.current({ mode: cm.state.vim.mode || '', keyBuffer: '' });
+          }
+        }
+      }
     }
 
     return () => {
